@@ -14,6 +14,27 @@ import stbtt "vendor:stb/truetype"
 
 FONT :: #load("inria_sans.ttf", []byte)
 
+Store_Key :: struct {
+	codepoint: rune,
+	size: i32,
+}
+
+Glyph_Store :: struct {
+	atlas_width: uint,
+	atlas_height: uint,
+	glyphs: map[Store_Key]Glyph_Bitmap,
+	_font_info: Font_Info,
+}
+
+store_make :: proc(font: Font_Info) -> Glyph_Store {
+	glyphs := make_map(map[Store_Key]Glyph_Bitmap)
+	store := Glyph_Store {
+		glyphs = glyphs,
+		_font_info = font,
+	}
+	return store
+}
+
 Box :: struct {
 	x0, x1: i32,
 	y0, y1: i32,
@@ -62,6 +83,16 @@ render_codepoint_bitmap :: proc(font_info: ^Font_Info, point: rune, scale: f32) 
 
 	bitmap.data = data
 	return
+}
+
+store_get_codepoint :: proc(store: ^Glyph_Store, point: rune, size: i32) -> Glyph_Bitmap {
+	bitmap, ok := store.glyphs[{point, size}]
+	if !ok {
+		scale := scale_for_pixel_height(&store._font_info, f32(size))
+		bitmap, _ = render_codepoint_bitmap(&store._font_info, point, scale)
+		store.glyphs[{point, size}] = bitmap
+	}
+	return bitmap
 }
 
 scale_for_pixel_height :: stbtt.ScaleForPixelHeight
