@@ -4,6 +4,7 @@ import "core:fmt"
 import "core:math"
 import "core:image"
 import "core:os"
+import "core:unicode/utf8"
 import "core:bytes"
 import "core:image/netpbm"
 import "core:image/qoi"
@@ -12,7 +13,7 @@ import "core:mem"
 import rl "vendor:raylib"
 import stbtt "vendor:stb/truetype"
 
-FONT :: #load("inria_sans.ttf", []byte)
+FONT :: #load("jetbrains_mono.ttf", []byte)
 
 Store_Key :: struct {
 	codepoint: rune,
@@ -35,23 +36,39 @@ store_make :: proc(font: Font_Info) -> Glyph_Store {
 	return store
 }
 
-// render_string_to_bitmap :: proc(store: ^Glyph_Store, text: string, size: i32, out: ^Glyph_Bitmap){
-// 	x := 0
-// 	scale := scale_for_pixel_height(&store._font_info, f32(size))
-// 	ascent, descent, line_gap := get_font_vmetrics(&store._font_info)
-//
-// 	for r in text {
-// 		bitmap := store_get_codepoint(store, r, size)
-// 		adv_width, lsb := get_codepoint_hmetrics(&store._font_info, 'A')
-// 		y := ascent + bitmap.box.y1
-// 		width, height := glyph_dimensions(bitmap)
-// 		byte_offset := x + int(math.round(f32(lsb) * scale)) + int(y * width)
-//
-// 		// for row in 0..<height {
-// 		// 	mem.copy_non_overlapping(&out.data[byte_offset], &bitmap.data[row * width], bitmap.width)
-// 		// }
-// 	}
-// }
+render_string_to_bitmap :: proc(store: ^Glyph_Store, text: string, size: i32, out: ^Bitmap){
+	scale := scale_for_pixel_height(&store._font_info, f32(size))
+	ascent, descent, line_gap := get_font_vmetrics(&store._font_info)
+
+	ascent = auto_cast math.round(f32(ascent) * scale)
+	descent = auto_cast math.round(f32(descent) * scale)
+
+	x_offset := 0
+	for r, i in text {
+		glyph_bitmap := store_get_codepoint(store, r, size)
+		adv_width, lsb := get_codepoint_hmetrics(&store._font_info, r)
+		// y := ascent + glyph_bitmap.box.y1
+		// width, height := glyph_dimensions(glyph_bitmap)
+
+		bitmap := Bitmap {
+			data = glyph_bitmap.data,
+			width = int(glyph_bitmap.box.x1 - glyph_bitmap.box.x0),
+			height = int(glyph_bitmap.box.y1 - glyph_bitmap.box.y0),
+		}
+
+		y_offset := ascent + glyph_bitmap.box.y0
+		// x_offset += auto_cast math.round(f32(lsb) * scale)
+
+		bitmap_copy(out, bitmap, x_offset, auto_cast y_offset)
+
+		x_offset += auto_cast math.round(f32(adv_width) * scale)
+		if i != len(text){
+			next, _ := utf8.decode_rune(text[i:])
+			kern := stbtt.GetCodepointKernAdvance(&store._font_info, r, next)
+			x_offset += auto_cast math.round(f32(kern) * scale)
+		}
+	}
+}
 
 Box :: struct {
 	x0, x1: i32,
@@ -136,27 +153,25 @@ bitmap_make :: proc(w, h: int) -> Bitmap {
 }
 
 main :: proc(){
-	// font_info : Font_Info
-	// if !stbtt.InitFont(&font_info, raw_data(FONT), 0){
-	// 	fmt.panicf("Failed to load font")
-	// }
-	//
-	// scale := scale_for_pixel_height(&font_info, 24 * 4)
-	// ascent, descent, line_gap := get_font_vmetrics(&font_info)
-	//
-	// ascent = i32(math.round(f32(ascent) * scale))
-	// descent = i32(math.round(f32(descent) * scale))
+	font_info : Font_Info
+	if !stbtt.InitFont(&font_info, raw_data(FONT), 0){
+		fmt.panicf("Failed to load font")
+	}
+
+	scale := scale_for_pixel_height(&font_info, 24*3)
+	ascent, descent, line_gap := get_font_vmetrics(&font_info)
+
+	ascent = i32(math.round(f32(ascent) * scale))
+	descent = i32(math.round(f32(descent) * scale))
 
 	handle, _ := os.open("out.pbm", os.O_WRONLY | os.O_CREATE, 0o644)
 	defer os.close(handle)
 
-	bitmap := bitmap_make(400, 300)
-	mem.set(&bitmap.data[0], 0x3e, len(bitmap.data))
+	bitmap := bitmap_make(1200, 1000)
+	// mem.set(&bitmap.data[0], 0x3f, bitmap.width * bitmap.height)
+	store := store_make(font_info)
+	render_string_to_bitmap(&store, "Hellope, world!", 24*3, &bitmap)
 
-	bm_a := bitmap_make(120, 40)
-	mem.set(&bm_a.data[0], 0xf1, len(bm_a.data))
-
-	bitmap_copy(&bitmap, bm_a, 20, 200)
 	save_image: {
 		// width, height := glyph_dimensions(bitmap)
 		using bitmap
