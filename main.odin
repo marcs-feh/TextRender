@@ -72,7 +72,7 @@ main :: proc(){
 		fmt.panicf("Failed to load font")
 	}
 
-	scale := scale_for_pixel_height(&font_info, 24)
+	scale := scale_for_pixel_height(&font_info, 24 * 4)
 	ascent, descent, line_gap := get_font_vmetrics(&font_info)
 
 	ascent = i32(math.round(f32(ascent) * scale))
@@ -83,8 +83,17 @@ main :: proc(){
 	handle, _ := os.open("out.pbm", os.O_WRONLY | os.O_CREATE, 0o644)
 	defer os.close(handle)
 
-	width, height := glyph_dimensions(bitmap)
-	os.write(handle, transmute([]byte)fmt.tprintf("P5\n%v %v\n%v\n", width, height, 255))
-	os.write(handle, bitmap.data)
-	fmt.println("IMG WRITE")
+	save_image: {
+		width, height := glyph_dimensions(bitmap)
+		total_written : i64
+
+		if n, err := os.write(handle, transmute([]byte)fmt.tprintf("P5\n%v %v\n%v\n", width, height, 255)); err == nil {
+			total_written += i64(n)
+		}
+		if n, err := os.write(handle, bitmap.data); err == nil {
+			total_written += i64(n)
+		}
+
+		fmt.printfln("Wrote %vB to out.pbm", total_written)
+	}
 }
