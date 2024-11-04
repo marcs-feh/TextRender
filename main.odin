@@ -36,15 +36,22 @@ store_make :: proc(font: Font_Info) -> Glyph_Store {
 	return store
 }
 
-render_string_to_bitmap :: proc(store: ^Glyph_Store, text: string, size: i32, out: ^Bitmap){
+render_string_to_bitmap :: proc(store: ^Glyph_Store, text: string, origin: [2]int, size: i32, out: ^Bitmap){
 	scale := scale_for_pixel_height(&store._font_info, f32(size))
 	ascent, descent, line_gap := get_font_vmetrics(&store._font_info)
 
 	ascent = auto_cast math.round(f32(ascent) * scale)
 	descent = auto_cast math.round(f32(descent) * scale)
 
-	x_offset := 0
+	x_offset := origin.x
+	line_offset := 0
 	for r, i in text {
+		if r == '\n' {
+			x_offset = origin.x
+			line_offset += int(size)
+			continue
+		}
+
 		glyph_bitmap := store_get_codepoint(store, r, size)
 		adv_width, lsb := get_codepoint_hmetrics(&store._font_info, r)
 		// y := ascent + glyph_bitmap.box.y1
@@ -56,7 +63,7 @@ render_string_to_bitmap :: proc(store: ^Glyph_Store, text: string, size: i32, ou
 			height = int(glyph_bitmap.box.y1 - glyph_bitmap.box.y0),
 		}
 
-		y_offset := ascent + glyph_bitmap.box.y0
+		y_offset := ascent + glyph_bitmap.box.y0 + i32(origin.y) + i32(line_offset)
 		// x_offset += auto_cast math.round(f32(lsb) * scale)
 
 		bitmap_copy(out, bitmap, x_offset, auto_cast y_offset)
@@ -170,7 +177,7 @@ main :: proc(){
 	bitmap := bitmap_make(1200, 1000)
 	// mem.set(&bitmap.data[0], 0x3f, bitmap.width * bitmap.height)
 	store := store_make(font_info)
-	render_string_to_bitmap(&store, "Hellope, world!", 24*3, &bitmap)
+	render_string_to_bitmap(&store, "Hellope.\nworld!", {20, 10}, 24*3, &bitmap)
 
 	save_image: {
 		// width, height := glyph_dimensions(bitmap)
